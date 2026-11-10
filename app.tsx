@@ -296,6 +296,22 @@ function changeLabel(kind: ChangedFile["changeKind"]): string {
   }
 }
 
+function changeColorClass(kind: ChangedFile["changeKind"]): string {
+  switch (kind) {
+    case "added":
+      return "text-emerald-600 dark:text-emerald-400";
+    case "modified":
+      return "text-amber-600 dark:text-amber-400";
+    case "deleted":
+      return "text-red-600 dark:text-red-400";
+    case "renamed":
+    case "copied":
+      return "text-sky-600 dark:text-sky-400";
+    default:
+      return "text-muted-foreground";
+  }
+}
+
 function FileNavRow({
   file,
   label,
@@ -340,8 +356,8 @@ function FileNavRow({
         />
       </span>
       <Icon name="FileText" className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+      <span className={cn("min-w-0 flex-1 truncate", changeColorClass(file.changeKind))}>{label}</span>
+      <span className={cn("shrink-0 font-mono text-[10px]", changeColorClass(file.changeKind))}>
         {changeLabel(file.changeKind)}
       </span>
     </div>
