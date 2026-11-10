@@ -10,7 +10,10 @@
     "name": "Diff Tree",
     "description": "Browse changed files in a collapsible tree with BB-native diffs.",
     "branding": {
-      "icon": "Files"
+      "icon": "./assets/file-tree.svg",
+      "experimental_icons": {
+        "file-tree": "./assets/file-tree.svg"
+      }
     },
     "server": "./server.ts",
     "app": "./app.tsx"

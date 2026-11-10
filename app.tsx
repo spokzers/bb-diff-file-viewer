@@ -985,7 +985,7 @@ export default definePluginApp((app) => {
     id: "diff-tree",
     title: "Diff tree",
     tooltip: "Browse changed files as a tree",
-    icon: "Files",
+    icon: "diff-tree/file-tree",
     layout: "flush",
     useVisible: ({ environment }) => environment !== null,
     component: DiffTreePanel,
