@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   definePluginApp,
@@ -10,6 +10,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { defineRpcContract } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Icon } from "@/components/ui/icon";
@@ -458,6 +459,29 @@ function TreeRows({
   });
 }
 
+function hunkAnchors(patch: string | undefined): Array<{ oldStart: number; newStart: number }> {
+  if (!patch) return [];
+  const anchors: Array<{ oldStart: number; newStart: number }> = [];
+  const pattern = /^@@ -([0-9]+)(?:,[0-9]+)? \+([0-9]+)(?:,[0-9]+)? @@/gm;
+  for (let match = pattern.exec(patch); match !== null; match = pattern.exec(patch)) {
+    anchors.push({ oldStart: Number(match[1]), newStart: Number(match[2]) });
+  }
+  return anchors;
+}
+
+function findDeepElement(root: ParentNode, selectors: string[]): HTMLElement | null {
+  for (const selector of selectors) {
+    const direct = root.querySelector(selector);
+    if (direct instanceof HTMLElement) return direct;
+  }
+  for (const element of Array.from(root.querySelectorAll("*"))) {
+    if (!(element instanceof HTMLElement) || element.shadowRoot === null) continue;
+    const nested = findDeepElement(element.shadowRoot, selectors);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 function fileSideQuery(
   target: DiffTarget,
   mergeBaseRef: string | null,
@@ -467,6 +491,10 @@ function fileSideQuery(
   if (target.type === "uncommitted") return { target: "uncommitted", path, side };
   if (target.type === "commit") return { target: "commit", sha: target.sha, path, side };
   return mergeBaseRef ? { target: "all", mergeBaseRef, path, side } : null;
+}
+
+function diffSectionId(environmentId: string, path: string): string {
+  return `diff-tree-${encodeURIComponent(environmentId)}-${encodeURIComponent(path)}`;
 }
 
 function DiffFileSection({
@@ -523,11 +551,35 @@ function DiffFileSection({
         new: { path: file.path, content: newContent.content },
       }
     : undefined;
+  const diffRootRef = useRef<HTMLDivElement>(null);
+  const hunks = useMemo(() => hunkAnchors(patch), [patch]);
+  const [activeHunk, setActiveHunk] = useState(0);
+  useEffect(() => setActiveHunk(0), [patch]);
+  const navigateToHunk = (nextIndex: number) => {
+    if (hunks.length === 0) return;
+    const index = Math.min(hunks.length - 1, Math.max(0, nextIndex));
+    setActiveHunk(index);
+    requestAnimationFrame(() => {
+      const root = diffRootRef.current;
+      const anchor = hunks[index];
+      if (!root || !anchor) return;
+      const element = findDeepElement(root, [
+        `[data-line="${anchor.newStart}"]`,
+        `[data-alt-line="${anchor.oldStart}"]`,
+        `[data-column-number="${anchor.newStart}"]`,
+        `[data-column-number="${anchor.oldStart}"]`,
+      ]);
+      if (!element) return;
+      const scroller = root.closest<HTMLElement>("[data-diff-scroll]");
+      if (!scroller) return;
+      const elementRect = element.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      const top = scroller.scrollTop + elementRect.top - scrollerRect.top - scroller.clientHeight / 3;
+      scroller.scrollTo({ top: Math.max(0, top), left: scroller.scrollLeft, behavior: "smooth" });
+    });
+  };
   return (
-    <section
-      id={`diff-tree-${encodeURIComponent(environmentId)}-${encodeURIComponent(file.path)}`}
-      className="scroll-mt-10 border-b border-border last:border-b-0"
-    >
+    <section className="scroll-mt-10 border-b border-border last:border-b-0">
       <div className="sticky top-0 z-10 flex min-h-10 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur">
         <Checkbox
           checked={viewed}
@@ -538,19 +590,48 @@ function DiffFileSection({
           {file.path}
         </span>
         {viewed ? <span className="text-[10px] text-muted-foreground">Viewed</span> : null}
+        {hunks.length > 1 ? (
+          <div className="flex items-center gap-0.5" aria-label="Hunk navigation">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              disabled={activeHunk <= 0}
+              onClick={() => navigateToHunk(activeHunk - 1)}
+              aria-label="Previous hunk"
+            >
+              <Icon name="ChevronUp" className="size-3.5" />
+            </Button>
+            <span className="min-w-8 text-center text-[10px] text-muted-foreground">
+              {activeHunk + 1}/{hunks.length}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              disabled={activeHunk >= hunks.length - 1}
+              onClick={() => navigateToHunk(activeHunk + 1)}
+              aria-label="Next hunk"
+            >
+              <Icon name="ChevronDown" className="size-3.5" />
+            </Button>
+          </div>
+        ) : null}
         <span className="text-xs text-emerald-600 dark:text-emerald-400">+{file.additions}</span>
         <span className="text-xs text-red-600 dark:text-red-400">−{file.deletions}</span>
       </div>
       {file.binary ? (
         <EmptyState>Binary file changed.</EmptyState>
       ) : patch ? (
-        <Diff
-          patch={patch}
-          path={file.path}
-          view={diffView}
-          experimental_fullFileContents={fullFileContents}
-          className="min-w-full"
-        />
+        <div ref={diffRootRef}>
+          <Diff
+            patch={patch}
+            path={file.path}
+            view={diffView}
+            experimental_fullFileContents={fullFileContents}
+            className="min-w-full"
+          />
+        </div>
       ) : (
         <EmptyState>
           {truncated
@@ -562,9 +643,134 @@ function DiffFileSection({
   );
 }
 
-function DiffTreePanel({ environment }: { environment: { id: string } | null }) {
+function LazyDiffFileSection(props: {
+  environmentId: string;
+  target: DiffTarget;
+  mergeBaseRef: string | null;
+  diffView: "unified" | "split";
+  file: ChangedFile;
+  patch: string | undefined;
+  viewed: boolean;
+  truncated: boolean;
+  onViewedChange: (file: ChangedFile, viewed: boolean) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(false);
+  const [placeholderHeight, setPlaceholderHeight] = useState(180);
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setActive(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+        if (entry.isIntersecting) {
+          setActive(true);
+        } else {
+          const height = element.getBoundingClientRect().height;
+          if (height > 0) setPlaceholderHeight(height);
+          setActive(false);
+        }
+      },
+      { rootMargin: "700px 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div
+      ref={containerRef}
+      id={diffSectionId(props.environmentId, props.file.path)}
+      style={active ? undefined : { height: `${placeholderHeight}px` }}
+    >
+      {active ? (
+        <DiffFileSection {...props} />
+      ) : (
+        <div className="flex h-full min-h-32 items-start gap-2 border-b border-border px-3 py-3 text-xs text-muted-foreground">
+          <Icon name="FileText" className="mt-0.5 size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate font-mono">{props.file.path}</span>
+          <span>Scroll to load</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViewOptionsMenu({
+  fileView,
+  fileNavigation,
+  diffView,
+  onFileViewChange,
+  onFileNavigationChange,
+  onDiffViewChange,
+}: {
+  fileView: "single" | "multiple";
+  fileNavigation: "tree" | "list";
+  diffView: "unified" | "split";
+  onFileViewChange: (value: "single" | "multiple") => void;
+  onFileNavigationChange: (value: "tree" | "list") => void;
+  onDiffViewChange: (value: "unified" | "split") => void;
+}) {
+  const itemClass = "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-7 pr-2 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button variant="ghost" size="icon" className="size-7" aria-label="Diff view settings">
+          <Icon name="Settings" className="size-4" />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          sideOffset={5}
+          align="start"
+          className="z-50 min-w-48 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Files</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={fileView} onValueChange={(value) => onFileViewChange(value as "single" | "multiple")}>
+            <DropdownMenu.RadioItem value="single" className={itemClass}>
+              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              Single file
+            </DropdownMenu.RadioItem>
+            <DropdownMenu.RadioItem value="multiple" className={itemClass}>
+              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              Multiple files
+            </DropdownMenu.RadioItem>
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="my-1 h-px bg-border" />
+          <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Navigation</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={fileNavigation} onValueChange={(value) => onFileNavigationChange(value as "tree" | "list")}>
+            <DropdownMenu.RadioItem value="tree" className={itemClass}>
+              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              File tree
+            </DropdownMenu.RadioItem>
+            <DropdownMenu.RadioItem value="list" className={itemClass}>
+              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              File list
+            </DropdownMenu.RadioItem>
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="my-1 h-px bg-border" />
+          <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Diff layout</DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={diffView} onValueChange={(value) => onDiffViewChange(value as "unified" | "split")}>
+            <DropdownMenu.RadioItem value="unified" className={itemClass}>
+              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              Unified
+            </DropdownMenu.RadioItem>
+            <DropdownMenu.RadioItem value="split" className={itemClass}>
+              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              Split
+            </DropdownMenu.RadioItem>
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function DiffTreePanel({ threadId, environment }: { threadId: string; environment: { id: string } | null }) {
   const visible = experimental_useTabVisible();
-  const { values: settingValues } = useSettings();
+  const { values: settingValues, isLoading: settingsLoading } = useSettings();
   const sidebarPosition = settingValues?.sidebarPosition === "right" ? "right" : "left";
   const defaultFileView = settingValues?.fileView === "multiple" ? "multiple" : "single";
   const defaultFileNavigation = settingValues?.fileNavigation === "list" ? "list" : "tree";
@@ -652,9 +858,33 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
   const [fileView, setFileView] = useState<"single" | "multiple">(defaultFileView);
   const [fileNavigation, setFileNavigation] = useState<"tree" | "list">(defaultFileNavigation);
   const [diffView, setDiffView] = useState<"unified" | "split">(defaultDiffView);
-  useEffect(() => setFileView(defaultFileView), [defaultFileView]);
-  useEffect(() => setFileNavigation(defaultFileNavigation), [defaultFileNavigation]);
-  useEffect(() => setDiffView(defaultDiffView), [defaultDiffView]);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  useEffect(() => {
+    if (settingsLoading) return;
+    setPreferencesReady(false);
+    let saved: unknown = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(`diff-tree:view:${threadId}`) ?? "null");
+    } catch {
+      saved = null;
+    }
+    const record = saved && typeof saved === "object" ? saved as Record<string, unknown> : {};
+    setFileView(record.fileView === "multiple" || record.fileView === "single" ? record.fileView : defaultFileView);
+    setFileNavigation(record.fileNavigation === "list" || record.fileNavigation === "tree" ? record.fileNavigation : defaultFileNavigation);
+    setDiffView(record.diffView === "split" || record.diffView === "unified" ? record.diffView : defaultDiffView);
+    setPreferencesReady(true);
+  }, [defaultDiffView, defaultFileNavigation, defaultFileView, settingsLoading, threadId]);
+  useEffect(() => {
+    if (!preferencesReady) return;
+    try {
+      localStorage.setItem(
+        `diff-tree:view:${threadId}`,
+        JSON.stringify({ fileView, fileNavigation, diffView }),
+      );
+    } catch {
+      // The view still works when browser storage is unavailable.
+    }
+  }, [diffView, fileNavigation, fileView, preferencesReady, threadId]);
   const effectiveSelectedPath =
     changedFiles.some((file) => file.path === selectedPath)
       ? selectedPath
@@ -742,8 +972,11 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
     setSelectedPath(file.path);
     if (fileView === "multiple") {
       requestAnimationFrame(() => {
-        document.getElementById(`diff-tree-${encodeURIComponent(environmentId)}-${encodeURIComponent(file.path)}`)
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        const element = document.getElementById(diffSectionId(environmentId, file.path));
+        const scroller = element?.closest<HTMLElement>("[data-diff-scroll]");
+        if (!element || !scroller) return;
+        const top = scroller.scrollTop + element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+        scroller.scrollTo({ top, left: scroller.scrollLeft, behavior: "smooth" });
       });
     }
   };
@@ -821,60 +1054,14 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
           >
             <Icon name={sidebarPosition === "right" ? "PanelRight" : "PanelLeft"} className="size-4" />
           </Button>
-          <div className="flex rounded-md border border-border p-0.5" aria-label="File view">
-            <Button
-              variant={fileView === "single" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setFileView("single")}
-            >
-              Single
-            </Button>
-            <Button
-              variant={fileView === "multiple" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setFileView("multiple")}
-            >
-              Multiple
-            </Button>
-          </div>
-          <div className="flex rounded-md border border-border p-0.5" aria-label="Diff layout">
-            <Button
-              variant={diffView === "unified" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setDiffView("unified")}
-            >
-              Unified
-            </Button>
-            <Button
-              variant={diffView === "split" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setDiffView("split")}
-            >
-              Split
-            </Button>
-          </div>
-          <div className="flex rounded-md border border-border p-0.5" aria-label="File navigation style">
-            <Button
-              variant={fileNavigation === "tree" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setFileNavigation("tree")}
-            >
-              Tree
-            </Button>
-            <Button
-              variant={fileNavigation === "list" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setFileNavigation("list")}
-            >
-              List
-            </Button>
-          </div>
+          <ViewOptionsMenu
+            fileView={fileView}
+            fileNavigation={fileNavigation}
+            diffView={diffView}
+            onFileViewChange={setFileView}
+            onFileNavigationChange={setFileNavigation}
+            onDiffViewChange={setDiffView}
+          />
         </div>
         <div
           className={cn(
@@ -886,7 +1073,6 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
             {files.data?.outcome === "available" ? files.data.shortstat : `${changedFiles.length} files`}
           </span>
           {viewedWriteError ? <span className="text-xs text-destructive">Viewed update failed</span> : null}
-          {truncated ? <span className="text-xs text-amber-600 dark:text-amber-400">Truncated</span> : null}
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={refetch} aria-label="Refresh diff">
             {loading ? "Refreshing…" : "Refresh"}
           </Button>
@@ -973,13 +1159,13 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
             </div>
           </aside>
         ) : null}
-        <main className={cn("min-w-0 flex-1 overflow-auto", sidebarPosition === "right" ? "order-1" : "order-2")}>
+        <main data-diff-scroll className={cn("min-w-0 flex-1 overflow-auto", sidebarPosition === "right" ? "order-1" : "order-2")}>
           {fileView === "multiple" ? (
             filteredFiles.length === 0 ? (
               <EmptyState>No files match the current search and filter.</EmptyState>
             ) : (
               filteredFiles.map((file) => (
-                <DiffFileSection
+                <LazyDiffFileSection
                   key={file.path}
                   environmentId={environmentId}
                   target={target ?? { type: "uncommitted" }}
@@ -994,17 +1180,19 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
               ))
             )
           ) : selectedFile === null ? null : (
-            <DiffFileSection
-              environmentId={environmentId}
-              target={target ?? { type: "uncommitted" }}
-              mergeBaseRef={files.data?.outcome === "available" ? files.data.mergeBaseRef : null}
-              diffView={diffView}
-              file={selectedFile}
-              patch={selectedPatch}
-              viewed={viewedPaths.has(selectedFile.path)}
-              truncated={truncated}
-              onViewedChange={setViewed}
-            />
+            <div id={diffSectionId(environmentId, selectedFile.path)}>
+              <DiffFileSection
+                environmentId={environmentId}
+                target={target ?? { type: "uncommitted" }}
+                mergeBaseRef={files.data?.outcome === "available" ? files.data.mergeBaseRef : null}
+                diffView={diffView}
+                file={selectedFile}
+                patch={selectedPatch}
+                viewed={viewedPaths.has(selectedFile.path)}
+                truncated={truncated}
+                onViewedChange={setViewed}
+              />
+            </div>
           )}
         </main>
       </div>
