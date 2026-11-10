@@ -1169,7 +1169,11 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
             </div>
           </aside>
         ) : null}
-        <main data-diff-scroll className={cn("min-w-0 flex-1 overflow-auto", sidebarPosition === "right" ? "order-1" : "order-2")}>
+        <main
+          data-diff-scroll
+          className={cn("min-w-0 flex-1 overflow-auto", sidebarPosition === "right" ? "order-1" : "order-2")}
+          style={{ scrollbarGutter: "stable", overflowAnchor: "none" }}
+        >
           {fileView === "multiple" ? (
             filteredFiles.length === 0 ? (
               <EmptyState>No files match the current search and filter.</EmptyState>
