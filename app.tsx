@@ -698,6 +698,16 @@ function LazyDiffFileSection(props: {
   );
 }
 
+function MenuRadioIndicator() {
+  return (
+    <span className="flex size-4 shrink-0 items-center justify-center">
+      <DropdownMenu.ItemIndicator>
+        <Icon name="Check" className="size-3.5" />
+      </DropdownMenu.ItemIndicator>
+    </span>
+  );
+}
+
 function ViewOptionsMenu({
   fileView,
   fileNavigation,
@@ -713,7 +723,7 @@ function ViewOptionsMenu({
   onFileNavigationChange: (value: "tree" | "list") => void;
   onDiffViewChange: (value: "unified" | "split") => void;
 }) {
-  const itemClass = "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-7 pr-2 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
+  const itemClass = "flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -730,11 +740,11 @@ function ViewOptionsMenu({
           <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Files</DropdownMenu.Label>
           <DropdownMenu.RadioGroup value={fileView} onValueChange={(value) => onFileViewChange(value as "single" | "multiple")}>
             <DropdownMenu.RadioItem value="single" className={itemClass}>
-              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              <MenuRadioIndicator />
               Single file
             </DropdownMenu.RadioItem>
             <DropdownMenu.RadioItem value="multiple" className={itemClass}>
-              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              <MenuRadioIndicator />
               Multiple files
             </DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
@@ -742,11 +752,11 @@ function ViewOptionsMenu({
           <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Navigation</DropdownMenu.Label>
           <DropdownMenu.RadioGroup value={fileNavigation} onValueChange={(value) => onFileNavigationChange(value as "tree" | "list")}>
             <DropdownMenu.RadioItem value="tree" className={itemClass}>
-              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              <MenuRadioIndicator />
               File tree
             </DropdownMenu.RadioItem>
             <DropdownMenu.RadioItem value="list" className={itemClass}>
-              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              <MenuRadioIndicator />
               File list
             </DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
@@ -754,11 +764,11 @@ function ViewOptionsMenu({
           <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Diff layout</DropdownMenu.Label>
           <DropdownMenu.RadioGroup value={diffView} onValueChange={(value) => onDiffViewChange(value as "unified" | "split")}>
             <DropdownMenu.RadioItem value="unified" className={itemClass}>
-              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              <MenuRadioIndicator />
               Unified
             </DropdownMenu.RadioItem>
             <DropdownMenu.RadioItem value="split" className={itemClass}>
-              <DropdownMenu.ItemIndicator className="absolute left-2"><Icon name="Check" className="size-3.5" /></DropdownMenu.ItemIndicator>
+              <MenuRadioIndicator />
               Split
             </DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
