@@ -28,6 +28,16 @@ export default async function plugin(bb: BbPluginApi) {
       experimental_optionLabels: { tree: "Folder tree", list: "Flat list" },
       default: "tree",
     },
+    diffView: {
+      type: "select",
+      label: "Default diff layout",
+      options: ["unified", "split"],
+      experimental_optionLabels: {
+        unified: "Unified",
+        split: "Side by side",
+      },
+      default: "unified",
+    },
   });
 
   bb.onDispose(() => bb.log.info("disposed"));

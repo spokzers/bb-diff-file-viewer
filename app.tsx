@@ -457,6 +457,7 @@ function DiffFileSection({
   environmentId,
   target,
   mergeBaseRef,
+  diffView,
   file,
   patch,
   viewed,
@@ -466,6 +467,7 @@ function DiffFileSection({
   environmentId: string;
   target: DiffTarget;
   mergeBaseRef: string | null;
+  diffView: "unified" | "split";
   file: ChangedFile;
   patch: string | undefined;
   viewed: boolean;
@@ -529,6 +531,7 @@ function DiffFileSection({
         <Diff
           patch={patch}
           path={file.path}
+          view={diffView}
           experimental_fullFileContents={fullFileContents}
           className="min-w-full"
         />
@@ -549,6 +552,7 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
   const sidebarPosition = settingValues?.sidebarPosition === "right" ? "right" : "left";
   const defaultFileView = settingValues?.fileView === "multiple" ? "multiple" : "single";
   const defaultFileNavigation = settingValues?.fileNavigation === "list" ? "list" : "tree";
+  const defaultDiffView = settingValues?.diffView === "split" ? "split" : "unified";
   const environmentId = environment?.id ?? "";
   const [changeTarget, setChangeTarget] = useState("all");
   const status = experimental_useRpcQuery({
@@ -631,8 +635,10 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
   const [resizeStart, setResizeStart] = useState<{ x: number; width: number; pointerId: number } | null>(null);
   const [fileView, setFileView] = useState<"single" | "multiple">(defaultFileView);
   const [fileNavigation, setFileNavigation] = useState<"tree" | "list">(defaultFileNavigation);
+  const [diffView, setDiffView] = useState<"unified" | "split">(defaultDiffView);
   useEffect(() => setFileView(defaultFileView), [defaultFileView]);
   useEffect(() => setFileNavigation(defaultFileNavigation), [defaultFileNavigation]);
+  useEffect(() => setDiffView(defaultDiffView), [defaultDiffView]);
   const effectiveSelectedPath =
     changedFiles.some((file) => file.path === selectedPath)
       ? selectedPath
@@ -817,6 +823,24 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
               Multiple
             </Button>
           </div>
+          <div className="flex rounded-md border border-border p-0.5" aria-label="Diff layout">
+            <Button
+              variant={diffView === "unified" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setDiffView("unified")}
+            >
+              Unified
+            </Button>
+            <Button
+              variant={diffView === "split" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setDiffView("split")}
+            >
+              Split
+            </Button>
+          </div>
           <div className="flex rounded-md border border-border p-0.5" aria-label="File navigation style">
             <Button
               variant={fileNavigation === "tree" ? "secondary" : "ghost"}
@@ -944,6 +968,7 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
                   environmentId={environmentId}
                   target={target ?? { type: "uncommitted" }}
                   mergeBaseRef={files.data?.outcome === "available" ? files.data.mergeBaseRef : null}
+                  diffView={diffView}
                   file={file}
                   patch={patches.get(file.path)}
                   viewed={viewedPaths.has(file.path)}
@@ -957,6 +982,7 @@ function DiffTreePanel({ environment }: { environment: { id: string } | null }) 
               environmentId={environmentId}
               target={target ?? { type: "uncommitted" }}
               mergeBaseRef={files.data?.outcome === "available" ? files.data.mergeBaseRef : null}
+              diffView={diffView}
               file={selectedFile}
               patch={selectedPatch}
               viewed={viewedPaths.has(selectedFile.path)}
