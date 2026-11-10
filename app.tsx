@@ -861,6 +861,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState("");
+  const [hideViewed, setHideViewed] = useState(false);
   const [viewedOverrides, setViewedOverrides] = useState<Map<string, boolean>>(() => new Map());
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(256);
@@ -882,6 +883,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
     setFileView(record.fileView === "multiple" || record.fileView === "single" ? record.fileView : defaultFileView);
     setFileNavigation(record.fileNavigation === "list" || record.fileNavigation === "tree" ? record.fileNavigation : defaultFileNavigation);
     setDiffView(record.diffView === "split" || record.diffView === "unified" ? record.diffView : defaultDiffView);
+    setHideViewed(record.hideViewed === true);
     setPreferencesReady(true);
   }, [defaultDiffView, defaultFileNavigation, defaultFileView, settingsLoading, threadId]);
   useEffect(() => {
@@ -889,34 +891,12 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
     try {
       localStorage.setItem(
         `diff-tree:view:${threadId}`,
-        JSON.stringify({ fileView, fileNavigation, diffView }),
+        JSON.stringify({ fileView, fileNavigation, diffView, hideViewed }),
       );
     } catch {
       // The view still works when browser storage is unavailable.
     }
-  }, [diffView, fileNavigation, fileView, preferencesReady, threadId]);
-  const effectiveSelectedPath =
-    changedFiles.some((file) => file.path === selectedPath)
-      ? selectedPath
-      : changedFiles[0]?.path ?? null;
-  const selectedFile = changedFiles.find((file) => file.path === effectiveSelectedPath) ?? null;
-  const filteredFiles = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return changedFiles.filter((file) => {
-      if (normalized === "") return true;
-      return file.path.toLocaleLowerCase().includes(normalized)
-        || file.previousPath?.toLocaleLowerCase().includes(normalized) === true;
-    });
-  }, [changedFiles, query]);
-  const tree = useMemo(() => buildTree(filteredFiles), [filteredFiles]);
-  const patches = useMemo(() => {
-    const result = patchesByPath(diff.data?.outcome === "available" ? diff.data.diff.diff : "");
-    if (files.data?.outcome === "available") {
-      for (const initial of files.data.initialPatches) result.set(initial.path, initial.patch);
-    }
-    return result;
-  }, [diff.data, files.data]);
-  const selectedPatch = effectiveSelectedPath ? patches.get(effectiveSelectedPath) : undefined;
+  }, [diffView, fileNavigation, fileView, hideViewed, preferencesReady, threadId]);
   const viewedPaths = useMemo(() => {
     const current = new Map(changedFiles.map((file) => [file.path, file.revision]));
     const result = new Set(
@@ -932,6 +912,29 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
     }
     return result;
   }, [changedFiles, clearViewed.pendingInputs, markViewed.pendingInputs, viewed.data, viewedOverrides]);
+  const filteredFiles = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return changedFiles.filter((file) => {
+      if (hideViewed && viewedPaths.has(file.path)) return false;
+      if (normalized === "") return true;
+      return file.path.toLocaleLowerCase().includes(normalized)
+        || file.previousPath?.toLocaleLowerCase().includes(normalized) === true;
+    });
+  }, [changedFiles, hideViewed, query, viewedPaths]);
+  const effectiveSelectedPath =
+    filteredFiles.some((file) => file.path === selectedPath)
+      ? selectedPath
+      : filteredFiles[0]?.path ?? null;
+  const selectedFile = filteredFiles.find((file) => file.path === effectiveSelectedPath) ?? null;
+  const tree = useMemo(() => buildTree(filteredFiles), [filteredFiles]);
+  const patches = useMemo(() => {
+    const result = patchesByPath(diff.data?.outcome === "available" ? diff.data.diff.diff : "");
+    if (files.data?.outcome === "available") {
+      for (const initial of files.data.initialPatches) result.set(initial.path, initial.patch);
+    }
+    return result;
+  }, [diff.data, files.data]);
+  const selectedPatch = effectiveSelectedPath ? patches.get(effectiveSelectedPath) : undefined;
 
   const loading = status.isLoading || (target !== null && (files.isLoading || diff.isLoading || viewed.isLoading));
   const rpcError = status.error ?? files.error ?? diff.error ?? viewed.error;
@@ -1083,8 +1086,27 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
             {files.data?.outcome === "available" ? files.data.shortstat : `${changedFiles.length} files`}
           </span>
           {viewedWriteError ? <span className="text-xs text-destructive">Viewed update failed</span> : null}
-          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={refetch} aria-label="Refresh diff">
-            {loading ? "Refreshing…" : "Refresh"}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={refetch}
+            aria-label={loading ? "Refreshing diff" : "Refresh diff"}
+            disabled={loading}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={cn("size-4", loading && "animate-spin")}
+              aria-hidden="true"
+            >
+              <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5" />
+              <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5" />
+            </svg>
           </Button>
         </div>
       </div>
@@ -1158,6 +1180,14 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
                 aria-label="Search changed files"
                 className="h-8 text-xs"
               />
+              <label className="flex cursor-pointer items-center gap-2 px-1 text-xs text-muted-foreground">
+                <Checkbox
+                  checked={hideViewed}
+                  onCheckedChange={(checked) => setHideViewed(checked === true)}
+                  aria-label="Hide viewed files"
+                />
+                Hide viewed files
+              </label>
               <p className="text-[10px] text-muted-foreground">
                 {filteredFiles.length} of {changedFiles.length} files · {viewedPaths.size} viewed
               </p>
@@ -1193,7 +1223,9 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
                 />
               ))
             )
-          ) : selectedFile === null ? null : (
+          ) : selectedFile === null ? (
+            <EmptyState>{hideViewed ? "No unviewed files." : "No files match the current search."}</EmptyState>
+          ) : (
             <div id={diffSectionId(environmentId, selectedFile.path)}>
               <DiffFileSection
                 environmentId={environmentId}

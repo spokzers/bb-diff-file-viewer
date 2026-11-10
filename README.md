@@ -13,7 +13,7 @@ The tab shows changed files in a collapsible folder tree. Selecting a file rende
 - Previous/next hunk navigation in each file header
 - Change target selector for all changes, uncommitted changes, or an individual commit
 - File-path search
-- Viewed marks shared with BB's Git diff state, including folder-wide marking
+- Viewed marks shared with BB's Git diff state, including folder-wide marking and an option to hide viewed files
 - Change status and per-file addition/deletion counts
 - All branch changes compared with the configured merge base
 - Refresh and sidebar show/hide controls
