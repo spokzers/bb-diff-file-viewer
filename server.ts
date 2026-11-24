@@ -43,6 +43,11 @@ export default async function plugin(bb: BbPluginApi) {
       label: "Wrap long diff lines by default",
       default: false,
     },
+    hideViewed: {
+      type: "boolean",
+      label: "Hide viewed files by default",
+      default: false,
+    },
     hideTests: {
       type: "boolean",
       label: "Hide test files by default",

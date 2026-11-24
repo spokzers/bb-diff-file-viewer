@@ -728,19 +728,31 @@ function ViewOptionsMenu({
   fileNavigation,
   diffView,
   wrapLines,
+  hideViewed,
+  hideTests,
+  hideGenerated,
   onFileViewChange,
   onFileNavigationChange,
   onDiffViewChange,
   onWrapLinesChange,
+  onHideViewedChange,
+  onHideTestsChange,
+  onHideGeneratedChange,
 }: {
   fileView: "single" | "multiple";
   fileNavigation: "tree" | "list";
   diffView: "unified" | "split";
   wrapLines: boolean;
+  hideViewed: boolean;
+  hideTests: boolean;
+  hideGenerated: boolean;
   onFileViewChange: (value: "single" | "multiple") => void;
   onFileNavigationChange: (value: "tree" | "list") => void;
   onDiffViewChange: (value: "unified" | "split") => void;
   onWrapLinesChange: (value: boolean) => void;
+  onHideViewedChange: (value: boolean) => void;
+  onHideTestsChange: (value: boolean) => void;
+  onHideGeneratedChange: (value: boolean) => void;
 }) {
   const itemClass = "flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
   return (
@@ -792,10 +804,40 @@ function ViewOptionsMenu({
             </DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
+          <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">File filters</DropdownMenu.Label>
+          <DropdownMenu.CheckboxItem
+            checked={hideViewed}
+            onCheckedChange={(checked) => onHideViewedChange(checked === true)}
+            onSelect={(event) => event.preventDefault()}
+            className={itemClass}
+          >
+            <MenuRadioIndicator />
+            Hide viewed files
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={hideTests}
+            onCheckedChange={(checked) => onHideTestsChange(checked === true)}
+            onSelect={(event) => event.preventDefault()}
+            className={itemClass}
+          >
+            <MenuRadioIndicator />
+            Hide tests
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.CheckboxItem
+            checked={hideGenerated}
+            onCheckedChange={(checked) => onHideGeneratedChange(checked === true)}
+            onSelect={(event) => event.preventDefault()}
+            className={itemClass}
+          >
+            <MenuRadioIndicator />
+            Hide generated files
+          </DropdownMenu.CheckboxItem>
+          <DropdownMenu.Separator className="my-1 h-px bg-border" />
           <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Lines</DropdownMenu.Label>
           <DropdownMenu.CheckboxItem
             checked={wrapLines}
             onCheckedChange={(checked) => onWrapLinesChange(checked === true)}
+            onSelect={(event) => event.preventDefault()}
             className={itemClass}
           >
             <MenuRadioIndicator />
@@ -815,6 +857,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
   const defaultFileNavigation = settingValues?.fileNavigation === "list" ? "list" : "tree";
   const defaultDiffView = settingValues?.diffView === "split" ? "split" : "unified";
   const defaultWrapLines = settingValues?.wrapLines === true;
+  const defaultHideViewed = settingValues?.hideViewed === true;
   const defaultHideTests = settingValues?.hideTests === true;
   const defaultHideGenerated = settingValues?.hideGenerated === true;
   const environmentId = environment?.id ?? "";
@@ -893,7 +936,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState("");
-  const [hideViewed, setHideViewed] = useState(false);
+  const [hideViewed, setHideViewed] = useState(defaultHideViewed);
   const [hideTests, setHideTests] = useState(defaultHideTests);
   const [hideGenerated, setHideGenerated] = useState(defaultHideGenerated);
   const [viewedOverrides, setViewedOverrides] = useState<Map<string, boolean>>(() => new Map());
@@ -918,12 +961,12 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
     setFileView(record.fileView === "multiple" || record.fileView === "single" ? record.fileView : defaultFileView);
     setFileNavigation(record.fileNavigation === "list" || record.fileNavigation === "tree" ? record.fileNavigation : defaultFileNavigation);
     setDiffView(record.diffView === "split" || record.diffView === "unified" ? record.diffView : defaultDiffView);
-    setHideViewed(record.hideViewed === true);
+    setHideViewed(typeof record.hideViewed === "boolean" ? record.hideViewed : defaultHideViewed);
     setHideTests(typeof record.hideTests === "boolean" ? record.hideTests : defaultHideTests);
     setHideGenerated(typeof record.hideGenerated === "boolean" ? record.hideGenerated : defaultHideGenerated);
     setWrapLines(typeof record.wrapLines === "boolean" ? record.wrapLines : defaultWrapLines);
     setPreferencesReady(true);
-  }, [defaultDiffView, defaultFileNavigation, defaultFileView, defaultHideGenerated, defaultHideTests, defaultWrapLines, settingsLoading, threadId]);
+  }, [defaultDiffView, defaultFileNavigation, defaultFileView, defaultHideGenerated, defaultHideTests, defaultHideViewed, defaultWrapLines, settingsLoading, threadId]);
   useEffect(() => {
     if (!preferencesReady) return;
     try {
@@ -1112,10 +1155,16 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
             fileNavigation={fileNavigation}
             diffView={diffView}
             wrapLines={wrapLines}
+            hideViewed={hideViewed}
+            hideTests={hideTests}
+            hideGenerated={hideGenerated}
             onFileViewChange={setFileView}
             onFileNavigationChange={setFileNavigation}
             onDiffViewChange={setDiffView}
             onWrapLinesChange={setWrapLines}
+            onHideViewedChange={setHideViewed}
+            onHideTestsChange={setHideTests}
+            onHideGeneratedChange={setHideGenerated}
           />
         </div>
         <div
@@ -1222,32 +1271,6 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
                 aria-label="Search changed files"
                 className="h-8 text-xs"
               />
-              <div className="space-y-1.5 px-1">
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    checked={hideViewed}
-                    onCheckedChange={(checked) => setHideViewed(checked === true)}
-                    aria-label="Hide viewed files"
-                  />
-                  Hide viewed files
-                </label>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    checked={hideTests}
-                    onCheckedChange={(checked) => setHideTests(checked === true)}
-                    aria-label="Hide test files"
-                  />
-                  Hide tests
-                </label>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-                  <Checkbox
-                    checked={hideGenerated}
-                    onCheckedChange={(checked) => setHideGenerated(checked === true)}
-                    aria-label="Hide generated files"
-                  />
-                  Hide generated files
-                </label>
-              </div>
               <p className="text-[10px] text-muted-foreground">
                 {filteredFiles.length} of {changedFiles.length} files · {viewedPaths.size} viewed
               </p>
