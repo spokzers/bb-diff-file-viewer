@@ -38,6 +38,21 @@ export default async function plugin(bb: BbPluginApi) {
       },
       default: "unified",
     },
+    wrapLines: {
+      type: "boolean",
+      label: "Wrap long diff lines by default",
+      default: false,
+    },
+    hideTests: {
+      type: "boolean",
+      label: "Hide test files by default",
+      default: false,
+    },
+    hideGenerated: {
+      type: "boolean",
+      label: "Hide generated files by default",
+      default: false,
+    },
   });
 
   bb.onDispose(() => bb.log.info("disposed"));

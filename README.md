@@ -9,11 +9,11 @@ The tab shows changed files in a collapsible folder tree. Selecting a file rende
 - Resizable file sidebar on the left or right
 - Collapsible folder tree or flat file list
 - Single-file or multiple-file diff views
-- Unified or side-by-side split diff layouts
+- Unified or side-by-side split diff layouts with optional long-line wrapping
 - Previous/next hunk navigation in each file header
 - Change target selector for all changes, uncommitted changes, or an individual commit
-- File-path search
-- Viewed marks shared with BB's Git diff state, including folder-wide marking and an option to hide viewed files
+- File-path search with filters for viewed, test, and generated files
+- Viewed marks shared with BB's Git diff state, including folder-wide marking
 - Change status and per-file addition/deletion counts
 - All branch changes compared with the configured merge base
 - Refresh and sidebar show/hide controls

@@ -297,6 +297,17 @@ function changeLabel(kind: ChangedFile["changeKind"]): string {
   }
 }
 
+function isTestFile(path: string): boolean {
+  return /(^|\/)(__tests__|tests?|specs?|e2e)(\/|$)/i.test(path)
+    || /(^|[._-])(test|spec|e2e)\.[^/]+$/i.test(path);
+}
+
+function isGeneratedFile(path: string): boolean {
+  return /(^|\/)(__generated__|generated|gen|dist|build|coverage)(\/|$)/i.test(path)
+    || /\.(generated|gen)\.[^/]+$/i.test(path)
+    || /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/i.test(path);
+}
+
 function changeColorClass(kind: ChangedFile["changeKind"]): string {
   switch (kind) {
     case "added":
@@ -502,6 +513,7 @@ function DiffFileSection({
   target,
   mergeBaseRef,
   diffView,
+  wrapLines,
   file,
   patch,
   viewed,
@@ -512,6 +524,7 @@ function DiffFileSection({
   target: DiffTarget;
   mergeBaseRef: string | null;
   diffView: "unified" | "split";
+  wrapLines: boolean;
   file: ChangedFile;
   patch: string | undefined;
   viewed: boolean;
@@ -628,6 +641,7 @@ function DiffFileSection({
             patch={patch}
             path={file.path}
             view={diffView}
+            overflow={wrapLines ? "wrap" : "scroll"}
             experimental_fullFileContents={fullFileContents}
             className="min-w-full"
           />
@@ -648,6 +662,7 @@ function LazyDiffFileSection(props: {
   target: DiffTarget;
   mergeBaseRef: string | null;
   diffView: "unified" | "split";
+  wrapLines: boolean;
   file: ChangedFile;
   patch: string | undefined;
   viewed: boolean;
@@ -712,16 +727,20 @@ function ViewOptionsMenu({
   fileView,
   fileNavigation,
   diffView,
+  wrapLines,
   onFileViewChange,
   onFileNavigationChange,
   onDiffViewChange,
+  onWrapLinesChange,
 }: {
   fileView: "single" | "multiple";
   fileNavigation: "tree" | "list";
   diffView: "unified" | "split";
+  wrapLines: boolean;
   onFileViewChange: (value: "single" | "multiple") => void;
   onFileNavigationChange: (value: "tree" | "list") => void;
   onDiffViewChange: (value: "unified" | "split") => void;
+  onWrapLinesChange: (value: boolean) => void;
 }) {
   const itemClass = "flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
   return (
@@ -772,6 +791,16 @@ function ViewOptionsMenu({
               Split
             </DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator className="my-1 h-px bg-border" />
+          <DropdownMenu.Label className="px-2 py-1 text-[10px] font-medium text-muted-foreground">Lines</DropdownMenu.Label>
+          <DropdownMenu.CheckboxItem
+            checked={wrapLines}
+            onCheckedChange={(checked) => onWrapLinesChange(checked === true)}
+            className={itemClass}
+          >
+            <MenuRadioIndicator />
+            Wrap long lines
+          </DropdownMenu.CheckboxItem>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -785,6 +814,9 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
   const defaultFileView = settingValues?.fileView === "multiple" ? "multiple" : "single";
   const defaultFileNavigation = settingValues?.fileNavigation === "list" ? "list" : "tree";
   const defaultDiffView = settingValues?.diffView === "split" ? "split" : "unified";
+  const defaultWrapLines = settingValues?.wrapLines === true;
+  const defaultHideTests = settingValues?.hideTests === true;
+  const defaultHideGenerated = settingValues?.hideGenerated === true;
   const environmentId = environment?.id ?? "";
   const [changeTarget, setChangeTarget] = useState("all");
   const status = experimental_useRpcQuery({
@@ -862,6 +894,8 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState("");
   const [hideViewed, setHideViewed] = useState(false);
+  const [hideTests, setHideTests] = useState(defaultHideTests);
+  const [hideGenerated, setHideGenerated] = useState(defaultHideGenerated);
   const [viewedOverrides, setViewedOverrides] = useState<Map<string, boolean>>(() => new Map());
   const [showSidebar, setShowSidebar] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(256);
@@ -869,6 +903,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
   const [fileView, setFileView] = useState<"single" | "multiple">(defaultFileView);
   const [fileNavigation, setFileNavigation] = useState<"tree" | "list">(defaultFileNavigation);
   const [diffView, setDiffView] = useState<"unified" | "split">(defaultDiffView);
+  const [wrapLines, setWrapLines] = useState(defaultWrapLines);
   const [preferencesReady, setPreferencesReady] = useState(false);
   useEffect(() => {
     if (settingsLoading) return;
@@ -884,19 +919,22 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
     setFileNavigation(record.fileNavigation === "list" || record.fileNavigation === "tree" ? record.fileNavigation : defaultFileNavigation);
     setDiffView(record.diffView === "split" || record.diffView === "unified" ? record.diffView : defaultDiffView);
     setHideViewed(record.hideViewed === true);
+    setHideTests(typeof record.hideTests === "boolean" ? record.hideTests : defaultHideTests);
+    setHideGenerated(typeof record.hideGenerated === "boolean" ? record.hideGenerated : defaultHideGenerated);
+    setWrapLines(typeof record.wrapLines === "boolean" ? record.wrapLines : defaultWrapLines);
     setPreferencesReady(true);
-  }, [defaultDiffView, defaultFileNavigation, defaultFileView, settingsLoading, threadId]);
+  }, [defaultDiffView, defaultFileNavigation, defaultFileView, defaultHideGenerated, defaultHideTests, defaultWrapLines, settingsLoading, threadId]);
   useEffect(() => {
     if (!preferencesReady) return;
     try {
       localStorage.setItem(
         `diff-tree:view:${threadId}`,
-        JSON.stringify({ fileView, fileNavigation, diffView, hideViewed }),
+        JSON.stringify({ fileView, fileNavigation, diffView, hideViewed, hideTests, hideGenerated, wrapLines }),
       );
     } catch {
       // The view still works when browser storage is unavailable.
     }
-  }, [diffView, fileNavigation, fileView, hideViewed, preferencesReady, threadId]);
+  }, [diffView, fileNavigation, fileView, hideGenerated, hideTests, hideViewed, preferencesReady, threadId, wrapLines]);
   const viewedPaths = useMemo(() => {
     const current = new Map(changedFiles.map((file) => [file.path, file.revision]));
     const result = new Set(
@@ -916,11 +954,13 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
     const normalized = query.trim().toLocaleLowerCase();
     return changedFiles.filter((file) => {
       if (hideViewed && viewedPaths.has(file.path)) return false;
+      if (hideTests && isTestFile(file.path)) return false;
+      if (hideGenerated && isGeneratedFile(file.path)) return false;
       if (normalized === "") return true;
       return file.path.toLocaleLowerCase().includes(normalized)
         || file.previousPath?.toLocaleLowerCase().includes(normalized) === true;
     });
-  }, [changedFiles, hideViewed, query, viewedPaths]);
+  }, [changedFiles, hideGenerated, hideTests, hideViewed, query, viewedPaths]);
   const effectiveSelectedPath =
     filteredFiles.some((file) => file.path === selectedPath)
       ? selectedPath
@@ -1071,9 +1111,11 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
             fileView={fileView}
             fileNavigation={fileNavigation}
             diffView={diffView}
+            wrapLines={wrapLines}
             onFileViewChange={setFileView}
             onFileNavigationChange={setFileNavigation}
             onDiffViewChange={setDiffView}
+            onWrapLinesChange={setWrapLines}
           />
         </div>
         <div
@@ -1180,14 +1222,32 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
                 aria-label="Search changed files"
                 className="h-8 text-xs"
               />
-              <label className="flex cursor-pointer items-center gap-2 px-1 text-xs text-muted-foreground">
-                <Checkbox
-                  checked={hideViewed}
-                  onCheckedChange={(checked) => setHideViewed(checked === true)}
-                  aria-label="Hide viewed files"
-                />
-                Hide viewed files
-              </label>
+              <div className="space-y-1.5 px-1">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={hideViewed}
+                    onCheckedChange={(checked) => setHideViewed(checked === true)}
+                    aria-label="Hide viewed files"
+                  />
+                  Hide viewed files
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={hideTests}
+                    onCheckedChange={(checked) => setHideTests(checked === true)}
+                    aria-label="Hide test files"
+                  />
+                  Hide tests
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox
+                    checked={hideGenerated}
+                    onCheckedChange={(checked) => setHideGenerated(checked === true)}
+                    aria-label="Hide generated files"
+                  />
+                  Hide generated files
+                </label>
+              </div>
               <p className="text-[10px] text-muted-foreground">
                 {filteredFiles.length} of {changedFiles.length} files · {viewedPaths.size} viewed
               </p>
@@ -1215,6 +1275,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
                   target={target ?? { type: "uncommitted" }}
                   mergeBaseRef={files.data?.outcome === "available" ? files.data.mergeBaseRef : null}
                   diffView={diffView}
+                  wrapLines={wrapLines}
                   file={file}
                   patch={patches.get(file.path)}
                   viewed={viewedPaths.has(file.path)}
@@ -1224,7 +1285,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
               ))
             )
           ) : selectedFile === null ? (
-            <EmptyState>{hideViewed ? "No unviewed files." : "No files match the current search."}</EmptyState>
+            <EmptyState>No files match the current filters.</EmptyState>
           ) : (
             <div id={diffSectionId(environmentId, selectedFile.path)}>
               <DiffFileSection
@@ -1232,6 +1293,7 @@ function DiffTreePanel({ threadId, environment }: { threadId: string; environmen
                 target={target ?? { type: "uncommitted" }}
                 mergeBaseRef={files.data?.outcome === "available" ? files.data.mergeBaseRef : null}
                 diffView={diffView}
+                wrapLines={wrapLines}
                 file={selectedFile}
                 patch={selectedPatch}
                 viewed={viewedPaths.has(selectedFile.path)}
